@@ -234,6 +234,35 @@ package object chisel3 {
       } yield pable
       Printables(seq)
     }
+
+    def cf(args: Any*): Printable = {
+      sc.checkLengths(args) // Enforce sc.parts.size == pargs.size + 1
+      val pargs: Seq[Option[Printable]] = args.map {
+        case p: Printable => Some(p)
+        case d: Data      => Some(d.toPrintable)
+        case any =>
+          for {
+            v <- Option(any) // Handle null inputs
+            //str = v.toString
+            str = String.format("%d",v.asInstanceOf[AnyRef])
+            if !str.isEmpty // Handle empty Strings
+          } yield PString(str)
+      }
+      println("Pargs = ",pargs)
+      val rawParts = sc.parts
+      println("RawParts = ",rawParts)
+      val parts = sc.parts.map(StringContext.treatEscapes)
+      println("Parts treated = ", parts)
+      // Zip sc.parts and pargs together ito flat Seq
+      // eg. Seq(sc.parts(0), pargs(0), sc.parts(1), pargs(1), ...)
+      val seq = for { // append None because sc.parts.size == pargs.size + 1
+        (literal, arg) <- parts.zip(pargs :+ None)
+        optPable <- Seq(Some(PString(literal)), arg)
+        pable <- optPable // Remove Option[_]
+      } yield pable
+      println("Seq = ", seq)
+      Printables(seq)
+    }
   }
 
   implicit def string2Printable(str: String): Printable = PString(str)
