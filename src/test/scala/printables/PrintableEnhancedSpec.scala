@@ -59,11 +59,23 @@ class PrintableSpec extends AnyFlatSpec with Matchers {
 
   it should "pass exact strings through" in {
     class MyModule extends BasicTester {
-      val tempP1 = cf"This is a printable"
+      val n1 = 20.5464
+      val n2 = 10
+      val n3 = 7.U 
+      val tempN1 = f"String interpol $n2%2.2f"
+      val tempP1 = cf"$n1 is This is a printable $n1%2.2f $n3%c %n2%2.2f"
+      val tempB1 = p"Let us try interpoling bits $n3"
+      val tempSFmt = String.format("%%d",n2.asInstanceOf[AnyRef])
       println("TempP1 = ", tempP1)
-      printf(p"An exact string")
+      println("TempN1 = ",tempN1)
+      println("TempB1 = ",tempB1)
+      //printf(p"An exact string ${Hexadecimal(n3)}")
+      println("tempSFmt = ",tempSFmt)
+      printf(cf"An exact string $n1 $n3%x another value $n2%2.2f")
     }
     val firrtl = ChiselStage.emitChirrtl(new MyModule)
+    println("firrtl = ")
+    println(firrtl)
     getPrintfs(firrtl) match {
       case Seq(Printf("An exact string", Seq())) =>
       case e                                     => fail()
