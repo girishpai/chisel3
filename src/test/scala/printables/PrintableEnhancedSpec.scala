@@ -71,7 +71,7 @@ class PrintableSpec extends AnyFlatSpec with Matchers {
       println("TempB1 = ",tempB1)
       //printf(p"An exact string ${Hexadecimal(n3)}")
       println("tempSFmt = ",tempSFmt)
-      printf(cf"An exact string $n1 $n3%x another value $n2%2.2f")
+      printf(cf"An exact string")
     }
     val firrtl = ChiselStage.emitChirrtl(new MyModule)
     println("firrtl = ")
@@ -83,7 +83,7 @@ class PrintableSpec extends AnyFlatSpec with Matchers {
   }
   
   
-  /*
+  
   it should "handle Printable and String concatination" in {
     class MyModule extends BasicTester {
       printf(p"First " + PString("Second ") + "Third")
@@ -228,6 +228,174 @@ class PrintableSpec extends AnyFlatSpec with Matchers {
       case e                                                                                   => fail()
     }
   }
+
+  // Unit tests for cf
+   it should "handle Printable and String concatination with cf format specifier" in {
+    class MyModule extends BasicTester {
+      printf(cf"First " + PString("Second ") + "Third")
+    }
+    val firrtl = ChiselStage.emitChirrtl(new MyModule)
+    getPrintfs(firrtl) match {
+      case Seq(Printf("First Second Third", Seq())) =>
+      case e                                        => fail()
+    }
+  }
+  it should "call toString on non-Printable objects with cf format specifier" in {
+    class MyModule extends BasicTester {
+      val myInt = 1234
+      printf(cf"myInt = $myInt")
+    }
+    val firrtl = ChiselStage.emitChirrtl(new MyModule)
+    getPrintfs(firrtl) match {
+      case Seq(Printf("myInt = 1234", Seq())) =>
+      case e                                  => fail()
+    }
+  }
+  it should "generate proper printf for simple Decimal printing with cf format specifier" in {
+    class MyModule extends BasicTester {
+      val myWire = WireDefault(1234.U)
+      printf(cf"myWire = ${Decimal(myWire)}")
+    }
+    val firrtl = ChiselStage.emitChirrtl(new MyModule)
+    getPrintfs(firrtl) match {
+      case Seq(Printf("myWire = %d", Seq("myWire"))) =>
+      case e                                         => fail()
+    }
+  }
+  it should "correctly escape percent with cf format specifier" in {
+    class MyModule extends BasicTester {
+      printf(cf"%")
+    }
+    val firrtl = ChiselStage.emitChirrtl(new MyModule)
+    getPrintfs(firrtl) match {
+      case Seq(Printf("%%", Seq())) =>
+      case e                        => fail()
+    }
+  }
+  it should "correctly emit tab with cf format specifier" in {
+    class MyModule extends BasicTester {
+      printf(cf"\t")
+    }
+    val firrtl = ChiselStage.emitChirrtl(new MyModule)
+    getPrintfs(firrtl) match {
+      case Seq(Printf("\\t", Seq())) =>
+      case e                         => fail()
+    }
+  }
+  it should "support names of circuit elements including submodule IO with cf format specifier" in {
+    // Submodule IO is a subtle issue because the Chisel element has a different
+    // parent module
+    class MySubModule extends Module {
+      val io = IO(new Bundle {
+        val fizz = UInt(32.W)
+      })
+    }
+    class MyBundle extends Bundle {
+      val foo = UInt(32.W)
+    }
+    class MyModule extends BasicTester {
+      override def desiredName: String = "MyModule"
+      val myWire = Wire(new MyBundle)
+      val myInst = Module(new MySubModule)
+      printf(cf"${Name(myWire.foo)}")
+      printf(cf"${FullName(myWire.foo)}")
+      printf(cf"${FullName(myInst.io.fizz)}")
+    }
+    val firrtl = ChiselStage.emitChirrtl(new MyModule)
+    getPrintfs(firrtl) match {
+      case Seq(Printf("foo", Seq()), Printf("myWire.foo", Seq()), Printf("myInst.io.fizz", Seq())) =>
+      case e                                                                                       => fail()
+    }
+  }
+  it should "handle printing ports of submodules with cf format specifier" in {
+    class MySubModule extends Module {
+      val io = IO(new Bundle {
+        val fizz = UInt(32.W)
+      })
+    }
+    class MyModule extends BasicTester {
+      val myInst = Module(new MySubModule)
+      printf(cf"${myInst.io.fizz}")
+    }
+    val firrtl = ChiselStage.emitChirrtl(new MyModule)
+    getPrintfs(firrtl) match {
+      case Seq(Printf("%d", Seq("myInst.io.fizz"))) =>
+      case e                                        => fail()
+    }
+  }
+  it should "print UInts and SInts as Decimal by default with cf format specifier" in {
+    class MyModule extends BasicTester {
+      val myUInt = WireDefault(0.U)
+      val mySInt = WireDefault(-1.S)
+      printf(cf"$myUInt & $mySInt")
+    }
+    val firrtl = ChiselStage.emitChirrtl(new MyModule)
+    getPrintfs(firrtl) match {
+      case Seq(Printf("%d & %d", Seq("myUInt", "mySInt"))) =>
+      case e                                               => fail()
+    }
+  }
+  it should "print Vecs like Scala Seqs by default with cf format specifier" in {
+    class MyModule extends BasicTester {
+      val myVec = Wire(Vec(4, UInt(32.W)))
+      myVec.foreach(_ := 0.U)
+      printf(cf"$myVec")
+    }
+    val firrtl = ChiselStage.emitChirrtl(new MyModule)
+    getPrintfs(firrtl) match {
+      case Seq(Printf("Vec(%d, %d, %d, %d)", Seq("myVec[0]", "myVec[1]", "myVec[2]", "myVec[3]"))) =>
+      case e                                                                                       => fail()
+    }
+  }
+  it should "print Bundles like Scala Maps by default with cf format specifier" in {
+    class MyModule extends BasicTester {
+      val myBun = Wire(new Bundle {
+        val foo = UInt(32.W)
+        val bar = UInt(32.W)
+      })
+      myBun.foo := 0.U
+      myBun.bar := 0.U
+      printf(cf"$myBun")
+    }
+    val firrtl = ChiselStage.emitChirrtl(new MyModule)
+    getPrintfs(firrtl) match {
+      case Seq(Printf("AnonymousBundle(foo -> %d, bar -> %d)", Seq("myBun.foo", "myBun.bar"))) =>
+      case e                                                                                   => fail()
+    }
+  }
+
+  it should "print regular scala variables with cf format specifier" in {
+
+    class MyModule extends BasicTester {
+      val f1 = 20.45156
+      val i1 = 10
+      val s1 : Short = 15
+      val l1 : Long = 253
+      printf(cf"F1 = $f1 D1 = $i1%2.4f F1 formatted = $f1%2.2f s1 = $s1%2.2f l1 = $l1%3.6f")
+
+    }
+    val firrtl = ChiselStage.emitChirrtl(new MyModule)
+    getPrintfs(firrtl) match {
+      case Seq(Printf("F1 = 20.45156 D1 = 10.0000 F1 formatted = 20.45 s1 = 15.00 l1 = 253.000000",Seq())) => 
+      case e => {println("e = " , e) ; fail() }
+    }
+  }
+
+  it should "print chisel bits with cf format specifier" in {
+
+    class MyModule extends BasicTester {
+      val b1 = 10.U 
+      printf(cf"b1 = $b1%x")
+
+    }
+    val firrtl = ChiselStage.emitChirrtl(new MyModule)
+    getPrintfs(firrtl) match {
+      case Seq(Printf("b1 = %x",Seq("UInt<4>(\"ha\")"))) => 
+      case e => {println("e = " , e) ; fail() }
+    }
+  }
+
+  /*
   it should "get emitted with a name and annotated" in {
 
     /** Test circuit containing annotated and renamed [[printf]]s. */

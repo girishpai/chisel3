@@ -237,37 +237,12 @@ package object chisel3 {
 
     def cf(args: Any*): Printable = {
       sc.checkLengths(args) // Enforce sc.parts.size == pargs.size + 1
-      val pargs: Seq[Option[Printable]] = args.map {
-        case p: Printable => Some(p)
-        case d: Data      => Some(d.toPrintable)
-        case any =>
-          for {
-            v <- Option(any) // Handle null inputs
-            str = v.toString
-            
-            if !str.isEmpty // Handle empty Strings
-          } yield PString(str)
-      }
-      //println("Pargs = ",pargs)
-      val rawParts = sc.parts
-      //println("RawParts = ",rawParts)
       val parts = sc.parts.map(StringContext.treatEscapes)
-      //println("Parts treated = ", parts)
-      val tempPartsSlice = parts.slice(1,parts.size)
-      val tempTupleSeq = tempPartsSlice.zip(args).map {
+      val partsAfterFirst = parts.slice(1,parts.size)
+      val tempTupleSeq = partsAfterFirst.zip(args).map {
         case (p,a) =>  {
           val idx_of_fmt_str = if(!p.isEmpty()  && p.charAt(0) == '%' && (p.size >= 2 && p.charAt(1) != '%')) p.indexWhere {_.isLetter} else -1
           val fmt = if(idx_of_fmt_str >= 0) p.substring(0,idx_of_fmt_str+1) else "%s"
-          println("Fmt = ",fmt.takeRight(1))
-
-          /*
-          val castA = (a,fmt.takeRight(1)) match {
-            case (v : Short, "f") => v.asInstanceOf[Double]
-            case (v : Int, "f") => v.asInstanceOf[Double]
-            case (v : Long, "f") => v.asInstanceOf[Double]
-            case (t,_) => t 
-          }
-          */
           val fmtA : Printable = a match {
             case b : Bits => {
               require(fmt.size == 2, "In the case of bits, only single format char allowed!")
@@ -295,24 +270,16 @@ package object chisel3 {
             }
           } 
           val modP = p.zipWithIndex.filter { _._2 > idx_of_fmt_str}.map {_._1}.mkString
-          //val modP = "Girish"
           (modP,Some(fmtA))
         }
       }
-      println("tempTupleSeq = ",tempTupleSeq)
-
-      // Zip sc.parts and pargs together ito flat Seq
-      // eg. Seq(sc.parts(0), pargs(0), sc.parts(1), pargs(1), ...)
       val combParts = parts(0) +: tempTupleSeq.map { _._1}
-      println("Parts = ", parts)
-      println("CombParts = ",combParts)
       val pargs_new : Seq[Option[Printable]] = tempTupleSeq.map {_._2}
       val seq = for { // append None because sc.parts.size == pargs.size + 1
         (literal, arg) <- combParts.zip(pargs_new :+ None)
         optPable <- Seq(Some(PString(literal)), arg)
         pable <- optPable // Remove Option[_]
       } yield pable
-      println("Seq = ", seq)
       Printables(seq)
     }
   }
