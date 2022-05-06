@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import chisel3.internal.firrtl.BinaryPoint
+import java.util.{MissingFormatArgumentException, UnknownFormatConversionException}
 
 /** This package contains the main chisel3 API.
   */
@@ -246,16 +247,25 @@ package object chisel3 {
           val fmtA : Printable = a match {
             case b : Bits => {
               require(fmt.size == 2, "In the case of bits, only single format char allowed!")
-              if(fmt == "%s") b.toPrintable
-              else if(fmt == "%n") Name(b)
-              else if(fmt == "%N") FullName(b)
-              else FirrtlFormat(fmt.substring(1,2),b)   
-                 }
+              fmt match {
+                case "%s" =>  b.toPrintable
+                case "%n" =>  Name(b)
+                case "%N" =>  FullName(b)
+                // Default - let FirrtlFormat check validity of the format string to avoid repeating checks. 
+                case f =>  FirrtlFormat(f.substring(1,2),b)   
+              }
+            }
             case d : Data => {
               require(fmt == "%s" || fmt == "%n" || fmt == "%N","Non-bits only  allowed with (%s,%n, %N) format specifiers!") 
-              if(fmt == "%n") Name(d)
-              else if(fmt == "%N") FullName(d)
-              else d.toPrintable
+              fmt match {
+              case "%n" =>  Name(d)
+              case "%N" =>  FullName(d)
+              case "%s" =>  d.toPrintable
+              case x => {
+                 val msg = s"Illegal format specifier '$x'!\n"
+                throw new UnknownFormatConversionException(msg)
+              }
+              }
             }
             case p : Printable => {
               require(fmt == "%s","Printables not allowed with format specifiers!") 
@@ -273,6 +283,7 @@ package object chisel3 {
               PString(String.format(fmt,castedT.asInstanceOf[AnyRef]))   
             }
           } 
+
           val modP = p.zipWithIndex.filter { _._2 > idx_of_fmt_str}.map {_._1}.mkString
           (modP,Some(fmtA))
         }
