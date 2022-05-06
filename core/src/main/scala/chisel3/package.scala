@@ -247,11 +247,15 @@ package object chisel3 {
             case b : Bits => {
               require(fmt.size == 2, "In the case of bits, only single format char allowed!")
               if(fmt == "%s") b.toPrintable
+              else if(fmt == "%n") Name(b)
+              else if(fmt == "%N") FullName(b)
               else FirrtlFormat(fmt.substring(1,2),b)   
                  }
             case d : Data => {
-              require(fmt == "%s","Non-bits not allowed with format specifiers!") 
-              d.toPrintable
+              require(fmt == "%s" || fmt == "%n" || fmt == "%N","Non-bits only  allowed with (%s,%n, %N) format specifiers!") 
+              if(fmt == "%n") Name(d)
+              else if(fmt == "%N") FullName(d)
+              else d.toPrintable
             }
             case p : Printable => {
               require(fmt == "%s","Printables not allowed with format specifiers!") 
